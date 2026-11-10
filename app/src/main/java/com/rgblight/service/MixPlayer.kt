@@ -39,14 +39,13 @@ class MixPlayer(
                     }
                     when (mode) {
                         MixMode.STROBE -> {
-                            delay(stepMs / 3)
+                            delay((stepMs / 3).toLong())
                             withContext(Dispatchers.Main) {
                                 ble.send(LotusProtocol.color(0, 0, 0))
                             }
-                            delay(stepMs / 3)
+                            delay((stepMs / 3).toLong())
                         }
                         MixMode.BREATHE -> {
-                            // плавно разгоняем и обратно (упрощённо — на каждый цвет даём двойную длительность)
                             delay((stepMs * 2).toLong())
                         }
                         else -> delay(stepMs.toLong())
