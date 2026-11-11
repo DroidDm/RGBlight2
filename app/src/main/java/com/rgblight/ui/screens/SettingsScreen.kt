@@ -1,33 +1,78 @@
 package com.rgblight.ui.screens
 
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.rgblight.BuildConfig
 import com.rgblight.data.MixBackgroundMode
 import com.rgblight.data.ThemeMode
 import com.rgblight.ui.MainViewModel
 import com.rgblight.ui.components.*
 import com.rgblight.ui.theme.iosColors
+import com.rgblight.util.AppLogger
+import com.rgblight.util.LogEntry
+import com.rgblight.util.LogLevel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun SettingsScreen(vm: MainViewModel) {
     val c = iosColors()
     val settings by vm.settings.collectAsState()
+    val logEntries by AppLogger.entries.collectAsState()
+
     var showUpdateDialog by remember { mutableStateOf(false) }
     var showVersionDialog by remember { mutableStateOf(false) }
+    var showLogDialog by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+
+    fun suggestedLogName(): String {
+        val df = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
+        return "rgb_light_log_${df.format(Date())}.txt"
+    }
+
+    val saveLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(AppLogger.export().toByteArray(Charsets.UTF_8))
+                }
+                Toast.makeText(context, "Журнал сохранён", Toast.LENGTH_SHORT).show()
+            }.onFailure { e ->
+                Toast.makeText(context, "Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     Column(
         Modifier.fillMaxSize().background(c.bg).verticalScroll(rememberScrollState()).padding(16.dp)
@@ -98,15 +143,6 @@ fun SettingsScreen(vm: MainViewModel) {
                         })
                     }
                 )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    when (settings.mixBackground) {
-                        MixBackgroundMode.ASK -> "При выходе будет спрос"
-                        MixBackgroundMode.ALWAYS -> "Микс продолжит работать в уведомлении"
-                        MixBackgroundMode.NEVER -> "Микс остановится при выходе"
-                    },
-                    color = c.textSecondary, fontSize = 13.sp
-                )
             }
         }
         Spacer(Modifier.height(24.dp))
@@ -132,6 +168,24 @@ fun SettingsScreen(vm: MainViewModel) {
         }
         Spacer(Modifier.height(24.dp))
 
+        SectionTitle("Диагностика")
+        IosCard {
+            IosRow(
+                title = "Открыть журнал",
+                subtitle = "${logEntries.size} записей · лог BLE и команд",
+                trailing = { Icon(Icons.Default.List, null, tint = c.accent) },
+                onClick = { showLogDialog = true }
+            )
+            IosDivider()
+            IosRow(
+                title = "Сохранить журнал в TXT",
+                subtitle = "Выбрать место сохранения",
+                trailing = { Icon(Icons.Default.Save, null, tint = c.accent) },
+                onClick = { saveLauncher.launch(suggestedLogName()) }
+            )
+        }
+        Spacer(Modifier.height(24.dp))
+
         SectionTitle("О приложении")
         IosCard {
             IosRow(
@@ -151,6 +205,15 @@ fun SettingsScreen(vm: MainViewModel) {
         Spacer(Modifier.height(32.dp))
     }
 
+    if (showLogDialog) {
+        LogDialog(
+            entries = logEntries,
+            onClose = { showLogDialog = false },
+            onSave = { saveLauncher.launch(suggestedLogName()) },
+            onClear = { AppLogger.clear() }
+        )
+    }
+
     if (showUpdateDialog) {
         UpdateDialog(
             savedUrl = settings.updateUrl,
@@ -167,6 +230,73 @@ fun SettingsScreen(vm: MainViewModel) {
             onConfirm = { showVersionDialog = false },
             onDismiss = { showVersionDialog = false }
         )
+    }
+}
+
+@Composable
+private fun LogDialog(
+    entries: List<LogEntry>,
+    onClose: () -> Unit,
+    onSave: () -> Unit,
+    onClear: () -> Unit
+) {
+    val c = iosColors()
+    val clipboard = LocalClipboardManager.current
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = c.bg) {
+            Column(Modifier.fillMaxSize().systemBarsPadding()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "Журнал",
+                        color = c.textPrimary, fontSize = 17.sp,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = {
+                        clipboard.setText(AnnotatedString(AppLogger.export()))
+                    }) { Text("Копир.", color = c.accent) }
+                    TextButton(onClick = onSave) { Text("TXT", color = c.accent) }
+                    TextButton(onClick = onClose) { Text("Закрыть", color = c.accent) }
+                }
+                HorizontalDivider(color = c.separator.copy(alpha = 0.5f))
+                if (entries.isEmpty()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Пока пусто", color = c.textSecondary)
+                    }
+                } else {
+                    val reversed = entries.asReversed()
+                    LazyColumn(Modifier.fillMaxSize().weight(1f).padding(horizontal = 8.dp)) {
+                        items(reversed) { e ->
+                            val color = when (e.level) {
+                                LogLevel.DEBUG -> c.textSecondary
+                                LogLevel.INFO -> c.textPrimary
+                                LogLevel.WARN -> Color(0xFFFF9500)
+                                LogLevel.ERROR -> c.red
+                            }
+                            Text(
+                                e.formatted(),
+                                color = color,
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 11.sp,
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp)
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider(color = c.separator.copy(alpha = 0.5f))
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Записей: ${entries.size}", color = c.textSecondary, fontSize = 12.sp)
+                    TextButton(onClick = onClear) { Text("Очистить", color = c.red) }
+                }
+            }
+        }
     }
 }
 
