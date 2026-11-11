@@ -16,6 +16,7 @@ import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
 
 data class ColorUiState(
@@ -154,17 +155,30 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         AppLogger.i("UI", "connect result: $ok")
         if (ok) {
             repo.setLastDevice(device.address, device.name ?: "RGB light")
+
+            // Ждём, пока найдётся writable characteristic (до 3 секунд)
+            val becameReady = withTimeoutOrNull(3000) {
+                ble.ready.first { it }
+            } ?: false
+            AppLogger.i("UI", "BLE ready: $becameReady")
+
             val s = settings.value
-            if (s.timeSync) {
+            if (becameReady && s.timeSync) {
                 AppLogger.i("UI", "Sending timeSync")
-                delay(300)
+                delay(150)
                 ble.send(LotusProtocol.timeSync())
+                delay(80)
             }
-            val lc = s.lastColor
-            AppLogger.i("UI", "Applying saved color R=${lc.r} G=${lc.g} B=${lc.b} bright=${lc.brightness}")
-            ble.send(LotusProtocol.color(lc.r, lc.g, lc.b))
-            delay(80)
-            ble.send(LotusProtocol.brightness(lc.brightness))
+            if (becameReady) {
+                val lc = s.lastColor
+                AppLogger.i("UI", "Applying saved color R=${lc.r} G=${lc.g} B=${lc.b} bright=${lc.brightness}")
+                ble.send(LotusProtocol.color(lc.r, lc.g, lc.b))
+                delay(80)
+                ble.send(LotusProtocol.brightness(lc.brightness))
+            } else {
+                AppLogger.w("UI", "BLE not ready after 3s — skip initial commands")
+            }
+
             LedService.start(getApplication(), device.name ?: "RGB light")
         }
     }
