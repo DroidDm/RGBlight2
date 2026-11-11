@@ -9,6 +9,7 @@ import com.rgblight.App
 import com.rgblight.ble.LotusProtocol
 import com.rgblight.data.*
 import com.rgblight.service.LedService
+import com.rgblight.util.AppLogger
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.BufferOverflow
@@ -85,6 +86,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     )
 
     init {
+        AppLogger.i("UI", "ViewModel created")
         viewModelScope.launch {
             settings.collectLatest { s ->
                 if (_colorState.value == ColorUiState() && s.lastColor != LastColor()) {
@@ -99,8 +101,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             pending.sample(60L).collect { cmd ->
                 when (cmd) {
-                    is PendingCmd.Rgb -> ble.send(LotusProtocol.color(cmd.r, cmd.g, cmd.b))
-                    is PendingCmd.Bright -> ble.send(LotusProtocol.brightness(cmd.v))
+                    is PendingCmd.Rgb -> {
+                        AppLogger.i("UI", "Send color R=${cmd.r} G=${cmd.g} B=${cmd.b}")
+                        ble.send(LotusProtocol.color(cmd.r, cmd.g, cmd.b))
+                    }
+                    is PendingCmd.Bright -> {
+                        AppLogger.i("UI", "Send brightness ${cmd.v}")
+                        ble.send(LotusProtocol.brightness(cmd.v))
+                    }
                 }
             }
         }
@@ -120,17 +128,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val s = settings.first()
             if (s.autoConnect && s.lastDeviceMac.isNotBlank() && ble.isBleSupported) {
+                AppLogger.i("UI", "Auto-connect to ${s.lastDeviceName} (${s.lastDeviceMac})")
                 runCatching {
                     val adapter = (getApplication<App>())
                         .getSystemService(android.bluetooth.BluetoothManager::class.java).adapter
                     val dev = adapter.getRemoteDevice(s.lastDeviceMac)
                     connect(dev)
-                }
+                }.onFailure { AppLogger.e("UI", "Auto-connect failed", it) }
             }
         }
     }
 
     fun startScan() {
+        AppLogger.i("UI", "startScan")
         scanJob?.cancel()
         scanJob = viewModelScope.launch {
             ble.scan().collect { _devices.value = it }
@@ -139,15 +149,19 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun stopScan() { scanJob?.cancel() }
 
     fun connect(device: BluetoothDevice) = viewModelScope.launch {
+        AppLogger.i("UI", "connect(${device.name ?: "?"} / ${device.address})")
         val ok = ble.connect(device)
+        AppLogger.i("UI", "connect result: $ok")
         if (ok) {
             repo.setLastDevice(device.address, device.name ?: "RGB light")
             val s = settings.value
             if (s.timeSync) {
+                AppLogger.i("UI", "Sending timeSync")
                 delay(300)
                 ble.send(LotusProtocol.timeSync())
             }
             val lc = s.lastColor
+            AppLogger.i("UI", "Applying saved color R=${lc.r} G=${lc.g} B=${lc.b} bright=${lc.brightness}")
             ble.send(LotusProtocol.color(lc.r, lc.g, lc.b))
             delay(80)
             ble.send(LotusProtocol.brightness(lc.brightness))
@@ -156,12 +170,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun disconnect() {
+        AppLogger.i("UI", "disconnect()")
         ble.disconnect()
         LedService.stop(getApplication())
     }
 
     fun togglePower() = viewModelScope.launch {
         _powerOn.value = !_powerOn.value
+        AppLogger.i("UI", "Power ${if (_powerOn.value) "ON" else "OFF"}")
         ble.send(if (_powerOn.value) LotusProtocol.powerOn() else LotusProtocol.powerOff())
     }
 
@@ -190,6 +206,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun startEffect(effectId: Int) = viewModelScope.launch {
+        AppLogger.i("UI", "startEffect #$effectId")
         _currentEffectId.value = effectId
         ble.send(LotusProtocol.brightness((_effectBrightness.value * 2.55f).toInt().coerceIn(0, 255)))
         ble.send(LotusProtocol.effect(effectId, _effectSpeed.value))
@@ -210,6 +227,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun stopEffect() = viewModelScope.launch {
+        AppLogger.i("UI", "stopEffect")
         _currentEffectId.value = null
         val rgb = hsvToRgb(_colorState.value.hue, _colorState.value.saturation, 1f)
         ble.send(LotusProtocol.color(rgb[0], rgb[1], rgb[2]))
@@ -218,6 +236,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun addMixColor(rgb: Int) {
         if (_mixColors.value.size >= 12) return
         _mixColors.value = _mixColors.value + (rgb and 0xFFFFFF)
+        AppLogger.i("UI", "addMixColor #${_mixColors.value.size}")
         persistMix()
     }
 
@@ -246,6 +265,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun startMix() = viewModelScope.launch {
         if (_mixColors.value.isEmpty()) return@launch
+        AppLogger.i("UI", "startMix colors=${_mixColors.value.size} mode=${_mixMode.value} speed=${_mixSpeed.value}")
         _isMixPlaying.value = true
         ble.send(LotusProtocol.brightness((_mixBrightness.value * 2.55f).toInt().coerceIn(0, 255)))
         LedService.playMix(
@@ -258,6 +278,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun stopMix() {
+        AppLogger.i("UI", "stopMix")
         _isMixPlaying.value = false
         LedService.stopMix(getApplication())
         viewModelScope.launch {
@@ -360,6 +381,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun setUpdateUrl(v: String) = viewModelScope.launch { repo.setUpdateUrl(v) }
 
     override fun onCleared() {
+        AppLogger.i("UI", "ViewModel cleared")
         scanJob?.cancel()
         super.onCleared()
     }

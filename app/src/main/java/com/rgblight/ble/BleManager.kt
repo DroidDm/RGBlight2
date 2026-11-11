@@ -5,7 +5,7 @@ import android.bluetooth.*
 import android.bluetooth.le.*
 import android.content.Context
 import android.os.Build
-import android.util.Log
+import com.rgblight.util.AppLogger
 import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.*
@@ -23,10 +23,6 @@ sealed interface ConnectionState {
 @SuppressLint("MissingPermission")
 class BleManager(private val context: Context) {
 
-    companion object {
-        private const val TAG = "BleManager"
-    }
-
     private val adapter: BluetoothAdapter? =
         context.getSystemService(BluetoothManager::class.java)?.adapter
     private val scanner get() = adapter?.bluetoothLeScanner
@@ -41,7 +37,6 @@ class BleManager(private val context: Context) {
     private val _connectedDevice = MutableStateFlow<BluetoothDevice?>(null)
     val connectedDevice: StateFlow<BluetoothDevice?> = _connectedDevice.asStateFlow()
 
-    /** Готов ли канал к отправке команд (сервисы обнаружены, writeChar найден) */
     private val _ready = MutableStateFlow(false)
     val ready: StateFlow<Boolean> = _ready.asStateFlow()
 
@@ -52,6 +47,9 @@ class BleManager(private val context: Context) {
         val found = LinkedHashMap<String, ScanResult>()
         val cb = object : ScanCallback() {
             override fun onScanResult(type: Int, result: ScanResult) {
+                if (!found.containsKey(result.device.address)) {
+                    AppLogger.i("BLE", "Found: ${result.device.name ?: "?"} ${result.device.address} rssi=${result.rssi}")
+                }
                 found[result.device.address] = result
                 trySend(found.values.toList())
             }
@@ -60,15 +58,19 @@ class BleManager(private val context: Context) {
                 trySend(found.values.toList())
             }
             override fun onScanFailed(errorCode: Int) {
-                Log.e(TAG, "Scan failed: $errorCode")
+                AppLogger.e("BLE", "Scan failed: $errorCode")
                 close(IllegalStateException("Scan failed: $errorCode"))
             }
         }
         val settings = ScanSettings.Builder()
             .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
             .build()
+        AppLogger.i("BLE", "Scan started")
         scanner?.startScan(null, settings, cb)
-        awaitClose { scanner?.stopScan(cb) }
+        awaitClose {
+            AppLogger.i("BLE", "Scan stopped")
+            scanner?.stopScan(cb)
+        }
     }
 
     suspend fun connect(device: BluetoothDevice): Boolean = suspendCancellableCoroutine { cont ->
@@ -78,7 +80,7 @@ class BleManager(private val context: Context) {
         _ready.value = false
         connectCont = cont
         _connectionState.value = ConnectionState.Connecting
-        Log.i(TAG, "Connecting to ${device.address}")
+        AppLogger.i("BLE", "Connecting to ${device.name ?: "?"} (${device.address})")
         gatt = device.connectGatt(context, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
         cont.invokeOnCancellation {
             runCatching { gatt?.disconnect(); gatt?.close() }
@@ -86,6 +88,7 @@ class BleManager(private val context: Context) {
             _connectionState.value = ConnectionState.Disconnected
             _connectedDevice.value = null
             _ready.value = false
+            AppLogger.w("BLE", "Connection cancelled")
         }
     }
 
@@ -93,15 +96,16 @@ class BleManager(private val context: Context) {
         val g = gatt
         val c = writeChar
         if (g == null || c == null) {
-            Log.w(TAG, "send(): not ready (gatt=${g != null}, writeChar=${c != null})")
+            AppLogger.w("BLE", "send() skipped — not ready (gatt=${g != null}, char=${c != null})")
             return false
         }
         return try {
             val writeType = chooseWriteType(c)
+            AppLogger.logBytes("BLE", "TX → ${c.uuid}", data)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 val result = g.writeCharacteristic(c, data, writeType)
                 if (result != BluetoothStatusCodes.SUCCESS) {
-                    Log.w(TAG, "writeCharacteristic returned $result")
+                    AppLogger.w("BLE", "writeCharacteristic result=$result")
                 }
                 result == BluetoothStatusCodes.SUCCESS
             } else {
@@ -113,12 +117,13 @@ class BleManager(private val context: Context) {
                 g.writeCharacteristic(c)
             }
         } catch (t: Throwable) {
-            Log.e(TAG, "send() exception", t)
+            AppLogger.e("BLE", "send() exception", t)
             false
         }
     }
 
     fun disconnect() {
+        AppLogger.i("BLE", "Manual disconnect")
         runCatching { gatt?.disconnect(); gatt?.close() }
         gatt = null
         writeChar = null
@@ -126,8 +131,6 @@ class BleManager(private val context: Context) {
         _connectionState.value = ConnectionState.Disconnected
         _ready.value = false
     }
-
-    // ===== Внутреннее =====
 
     private fun chooseWriteType(c: BluetoothGattCharacteristic): Int {
         val p = c.properties
@@ -145,48 +148,39 @@ class BleManager(private val context: Context) {
     }
 
     private fun findInService(service: BluetoothGattService): BluetoothGattCharacteristic? {
-        // 1) Сначала пробуем известный UUID (FFF3)
         val known = service.getCharacteristic(LotusProtocol.WRITE_UUID)
         if (known != null && isWritable(known)) return known
-
-        // 2) Иначе — любая writable характеристика в этом сервисе
         return service.characteristics.firstOrNull { isWritable(it) }
     }
 
     private fun findWriteCharacteristic(g: BluetoothGatt): BluetoothGattCharacteristic? {
-        // Известные сервисы в порядке приоритета
         val preferredServices = listOf(
             LotusProtocol.SERVICE_UUID,
             UUID.fromString("0000ffe0-0000-1000-8000-00805f9b34fb"),
             UUID.fromString("0000ffe5-0000-1000-8000-00805f9b34fb"),
-            UUID.fromString("0000ff00-0000-1000-8000-00805f9b34fb"),
-            UUID.fromString("0000180f-0000-1000-8000-00805f9b34fb") // запасной вариант
+            UUID.fromString("0000ff00-0000-1000-8000-00805f9b34fb")
         )
-
         for (uuid in preferredServices) {
             val service = g.getService(uuid) ?: continue
             val char = findInService(service)
             if (char != null) {
-                Log.i(TAG, "Write char found in service $uuid: ${char.uuid}")
+                AppLogger.i("BLE", "Write char in preferred service $uuid: ${char.uuid}")
                 return char
             }
         }
-
-        // Fallback: перебираем ВСЕ сервисы и все writable характеристики
         for (service in g.services) {
             val char = findInService(service)
             if (char != null) {
-                Log.i(TAG, "Write char found (fallback) in service ${service.uuid}: ${char.uuid}")
+                AppLogger.i("BLE", "Write char (fallback) in ${service.uuid}: ${char.uuid}")
                 return char
             }
         }
-
         return null
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
-            Log.i(TAG, "onConnectionStateChange status=$status newState=$newState")
+            AppLogger.i("BLE", "onConnectionStateChange status=$status newState=$newState")
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 _connectionState.value = ConnectionState.Connected
                 _connectedDevice.value = g.device
@@ -202,29 +196,29 @@ class BleManager(private val context: Context) {
         }
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
-            Log.i(TAG, "onServicesDiscovered status=$status, services=${g.services.size}")
+            AppLogger.i("BLE", "onServicesDiscovered status=$status, ${g.services.size} services")
             g.services.forEach { s ->
-                Log.i(TAG, "  service ${s.uuid}")
+                AppLogger.i("BLE", "  svc ${s.uuid}")
                 s.characteristics.forEach { c ->
-                    Log.i(TAG, "    char ${c.uuid} props=${c.properties}")
+                    AppLogger.i("BLE", "    chr ${c.uuid} props=${c.properties}")
                 }
             }
 
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                Log.e(TAG, "onServicesDiscovered failed")
+                AppLogger.e("BLE", "onServicesDiscovered failed status=$status")
                 return
             }
 
             val char = findWriteCharacteristic(g)
             if (char == null) {
-                Log.e(TAG, "No writable characteristic found!")
+                AppLogger.e("BLE", "No writable characteristic found!")
                 _ready.value = false
                 return
             }
             writeChar = char
             _ready.value = true
+            AppLogger.i("BLE", "Ready. writeType=${chooseWriteType(char)}")
 
-            // Подписываемся на notify (если есть), чтобы видеть ответы устройства
             g.getService(LotusProtocol.SERVICE_UUID)
                 ?.getCharacteristic(LotusProtocol.NOTIFY_UUID)
                 ?.let { notify ->
@@ -242,19 +236,14 @@ class BleManager(private val context: Context) {
                 }
         }
 
-        override fun onCharacteristicWrite(
-            g: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic,
-            status: Int
-        ) {
-            Log.i(TAG, "onCharacteristicWrite uuid=${characteristic.uuid} status=$status")
+        override fun onCharacteristicWrite(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
+            AppLogger.i("BLE", "onCharacteristicWrite uuid=${c.uuid} status=$status")
         }
 
-        override fun onCharacteristicChanged(
-            g: BluetoothGatt,
-            characteristic: BluetoothGattCharacteristic
-        ) {
-            Log.i(TAG, "onCharacteristicChanged uuid=${characteristic.uuid}")
+        override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) {
+            @Suppress("DEPRECATION")
+            val v = c.value ?: return
+            AppLogger.logBytes("BLE", "RX ← ${c.uuid}", v)
         }
     }
 }
