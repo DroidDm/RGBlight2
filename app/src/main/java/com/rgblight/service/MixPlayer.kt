@@ -7,6 +7,7 @@ import com.rgblight.data.EffectMode
 import com.rgblight.data.MixStep
 import com.rgblight.data.StepKind
 import kotlinx.coroutines.*
+import kotlin.coroutines.coroutineContext
 
 class MixPlayer(
     private val ble: BleManager,
@@ -55,7 +56,7 @@ class MixPlayer(
         val seq = step.colors.ifEmpty { listOf(0xFF0000, 0x00FF00, 0x0000FF) }
         val end = System.currentTimeMillis() + hold
         var idx = 0
-        while (isActive && System.currentTimeMillis() < end) {
+        while (coroutineContext.isActive && System.currentTimeMillis() < end) {
             when (step.effectMode) {
                 EffectMode.FADE, EffectMode.FADE_CUSTOM, EffectMode.FADE_PAUSE -> {
                     val a = seq[idx % seq.size]; val b = seq[(idx + 1) % seq.size]

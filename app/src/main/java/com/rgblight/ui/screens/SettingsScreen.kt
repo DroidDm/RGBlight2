@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.window.Dialog
 import com.rgblight.BuildConfig
 import com.rgblight.data.MixBackgroundMode
 import com.rgblight.data.ThemeMode

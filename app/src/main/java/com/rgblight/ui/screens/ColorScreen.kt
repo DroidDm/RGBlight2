@@ -38,13 +38,15 @@ fun ColorScreen(vm: MainViewModel) {
     var showSave by remember { mutableStateOf(false) }
     var deleteSlot by remember { mutableStateOf<Int?>(null) }
 
+    // Текущий RGB — вычисляется из HSV-состояния (state.value = яркость 0..100)
+    val rgb = AndroidColor.HSVToColor(
+        floatArrayOf(state.hue, state.saturation, state.value / 100f)
+    )
+
     Column(
         Modifier.fillMaxSize().background(c.bg).verticalScroll(rememberScrollState()).padding(16.dp)
     ) {
         // Превью
-        val rgb = AndroidColor.HSVToColor(
-            floatArrayOf(state.hue, state.saturation, state.value / 100f)
-        )
         PreviewBox(Color(rgb), height = 90)
         Spacer(Modifier.height(16.dp))
 

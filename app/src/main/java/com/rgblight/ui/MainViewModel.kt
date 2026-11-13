@@ -419,6 +419,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         playMix()
     }
 
+    // ============ Сохранённое: применить / удалить ============
+
+    fun applySavedColor(col: SavedColor) {
+        applyPreset(Color.rgb(col.r, col.g, col.b))
+    }
+    fun deleteSavedColor(id: String) = viewModelScope.launch { savedRepo.deleteColor(id) }
+    fun deleteSavedEffect(id: String) = viewModelScope.launch { savedRepo.deleteEffect(id) }
+    fun deleteSavedMix(id: String) = viewModelScope.launch { savedRepo.deleteMix(id) }
+
     // ============ Музыка ============
 
     fun setMusicSource(s: MusicSource) { _musicSource.value = s }
