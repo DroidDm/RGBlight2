@@ -3,6 +3,7 @@ package com.rgblight.ui.screens
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -32,6 +33,12 @@ import com.rgblight.ui.MixUiStep
 import com.rgblight.ui.components.*
 import com.rgblight.ui.theme.iosColors
 
+// Полные ARGB — иначе кружки в диалоге будут прозрачными.
+private val EDIT_STEP_PALETTE: List<Int> = listOf(
+    0xFFFFFFFF.toInt(), 0xFFFF0000.toInt(), 0xFF00FF00.toInt(), 0xFF0000FF.toInt(),
+    0xFFFFFF00.toInt(), 0xFFFF00FF.toInt(), 0xFF00FFFF.toInt(), 0xFFFF9500.toInt()
+)
+
 @Composable
 fun MixScreen(vm: MainViewModel) {
     val c = iosColors()
@@ -44,9 +51,9 @@ fun MixScreen(vm: MainViewModel) {
     var showSave by remember { mutableStateOf(false) }
 
     Column(Modifier.fillMaxSize().background(c.bg).padding(16.dp)) {
-        // Статичное превью первого шага
         val preview = steps.firstOrNull()?.let { step ->
-            if (step.kind == StepKind.COLOR) Color(step.color) else Color(step.colors.firstOrNull() ?: 0xFF0000)
+            if (step.kind == StepKind.COLOR) Color(step.color)
+            else Color(step.colors.firstOrNull() ?: 0xFFFF0000.toInt())
         } ?: Color(0xFFEEEEEE)
         PreviewBox(preview, height = 60)
         Spacer(Modifier.height(12.dp))
@@ -63,10 +70,7 @@ fun MixScreen(vm: MainViewModel) {
 
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             itemsIndexed(steps) { idx, step ->
-                MixStepCard(
-                    index = idx, step = step,
-                    onClick = { editIndex = idx }
-                )
+                MixStepCard(index = idx, step = step, onClick = { editIndex = idx })
             }
             if (steps.size < 20) {
                 item {
@@ -183,8 +187,9 @@ private fun MixStepCard(index: Int, step: MixUiStep, onClick: () -> Unit) {
                     color = c.textSecondary, fontSize = 12.sp)
             }
         } else {
-            LazyRow(Modifier.width(70.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                items(step.colors.take(4)) { argb ->
+            Row(Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                step.colors.take(4).forEach { argb ->
                     Box(Modifier.size(14.dp).background(Color(argb), RoundedCornerShape(50)))
                 }
             }
@@ -256,11 +261,9 @@ private fun EditStepDialog(
 
             if (step.kind == StepKind.COLOR) {
                 Text("Цвет", color = c.textPrimary, fontSize = 13.sp)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(listOf(
-                        0xFFFFFF, 0xFF0000, 0x00FF00, 0x0000FF,
-                        0xFFFF00, 0xFF00FF, 0x00FFFF, 0xFF9500
-                    )) { argb ->
+                Row(Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    EDIT_STEP_PALETTE.forEach { argb ->
                         Box(
                             Modifier.size(30.dp)
                                 .background(Color(argb), RoundedCornerShape(50))
@@ -270,8 +273,9 @@ private fun EditStepDialog(
                 }
             } else {
                 Text("Режим", color = c.textPrimary, fontSize = 13.sp)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(EffectMode.values().toList()) { m ->
+                Row(Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    EffectMode.values().forEach { m ->
                         FilterChip(
                             selected = effectMode == m,
                             onClick = { effectMode = m },
@@ -280,8 +284,9 @@ private fun EditStepDialog(
                     }
                 }
                 Text("Цвета (${colors.size})", color = c.textPrimary, fontSize = 13.sp)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    itemsIndexed(colors) { idx, argb ->
+                Row(Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    colors.forEachIndexed { idx, argb ->
                         Box(
                             Modifier.size(30.dp)
                                 .background(Color(argb), RoundedCornerShape(50))

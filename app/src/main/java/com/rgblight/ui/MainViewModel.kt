@@ -27,11 +27,14 @@ data class ColorUiState(
     val value: Float = 100f
 )
 
+/** Цвета — полные ARGB (0xFFRRGGBB), иначе Color(Int) даст прозрачный. */
 data class MixUiStep(
     val kind: StepKind,
-    val color: Int = 0xFFFFFF,
+    val color: Int = 0xFFFFFFFF.toInt(),
     val effectMode: EffectMode = EffectMode.FADE,
-    val colors: List<Int> = listOf(0xFF0000, 0x00FF00, 0x0000FF),
+    val colors: List<Int> = listOf(
+        0xFFFF0000.toInt(), 0xFF00FF00.toInt(), 0xFF0000FF.toInt()
+    ),
     val holdMs: Int = 1000,
     val rampMs: Int = 500
 ) {
@@ -39,6 +42,10 @@ data class MixUiStep(
 }
 
 enum class MusicSource { CONTROLLER, PHONE }
+
+private val DEFAULT_EFFECT_COLORS: List<Int> = listOf(
+    0xFFFF0000.toInt(), 0xFF00FF00.toInt(), 0xFF0000FF.toInt()
+)
 
 @OptIn(FlowPreview::class)
 class MainViewModel(app: Application) : AndroidViewModel(app) {
@@ -54,7 +61,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     val savedColors = savedRepo.savedColors.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val savedEffects = savedRepo.savedEffects.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     val savedMixes = savedRepo.savedMixes.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
-    val colorSlots = savedRepo.colorSlots.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    // Стартуем с 10 пустыми слотами, чтобы в UI сразу была кнопка «+».
+    val colorSlots = savedRepo.colorSlots.stateIn(
+        viewModelScope, SharingStarted.Eagerly,
+        (0 until 10).map { ColorSlot(it, null) }
+    )
 
     // ===== Скан =====
     private val _devices = MutableStateFlow<List<ScanResult>>(emptyList())
@@ -76,7 +88,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // ===== Эффект (общий) =====
     private val _effectMode = MutableStateFlow(EffectMode.FADE)
     val effectMode = _effectMode.asStateFlow()
-    private val _effectColors = MutableStateFlow(listOf(0xFF0000, 0x00FF00, 0x0000FF))
+    private val _effectColors = MutableStateFlow(DEFAULT_EFFECT_COLORS)
     val effectColors = _effectColors.asStateFlow()
     private val _protocolId = MutableStateFlow<Int?>(null)
     val protocolId = _protocolId.asStateFlow()
@@ -161,7 +173,6 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ============ Скан ============
 
-    /** Кнопка 🔍 — скан + автоподключение к ELK-/LED-устройству или к последнему. */
     fun startScanAuto() {
         AppLogger.i("UI", "startScanAuto")
         scanJob?.cancel()
@@ -436,10 +447,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         when (_musicSource.value) {
             MusicSource.CONTROLLER ->
                 LedService.musicOn(getApplication(), useEnc())
-            MusicSource.PHONE -> {
-                // Заглушка: простая цветомузыка от микрофона телефона
-                startPhoneMusic()
-            }
+            MusicSource.PHONE -> startPhoneMusic()
         }
     }
     fun stopMusic() {

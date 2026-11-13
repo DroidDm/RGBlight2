@@ -12,12 +12,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.rgblight.data.ColorSlot
 import com.rgblight.ui.theme.iosColors
 
@@ -43,6 +45,14 @@ fun ColorSlotRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Если список пришёл пустым (первый кадр до DataStore) — просто показываем «+».
+        if (slots.isEmpty()) {
+            AddSlotButton(onAdd)
+            Spacer(Modifier.width(10.dp))
+            HintText("Нажмите + чтобы сохранить текущий цвет")
+            return@Row
+        }
+
         slots.forEachIndexed { idx, slot ->
             if (slot.rgb != null) {
                 SlotCircle(
@@ -52,19 +62,35 @@ fun ColorSlotRow(
                     onLongClick = { onLongPress(idx) }
                 )
             } else if (idx == activeCount) {
-                // Первый пустой после заполненных — кнопка «+»
-                Box(
-                    Modifier.size(40.dp)
-                        .background(c.surfaceSecondary, RoundedCornerShape(50))
-                        .border(1.dp, c.separator, RoundedCornerShape(50))
-                        .clickable { onAdd() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Add, null, tint = c.accent, modifier = Modifier.size(22.dp))
-                }
+                AddSlotButton(onAdd)
             }
         }
+
+        if (activeCount == 0) {
+            Spacer(Modifier.width(10.dp))
+            HintText("Нажмите + чтобы сохранить текущий цвет")
+        }
     }
+}
+
+@Composable
+private fun AddSlotButton(onAdd: () -> Unit) {
+    val c = iosColors()
+    Box(
+        Modifier.size(40.dp)
+            .background(c.surfaceSecondary, RoundedCornerShape(50))
+            .border(1.dp, c.accent.copy(alpha = 0.5f), RoundedCornerShape(50))
+            .clickable { onAdd() },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(Icons.Default.Add, null, tint = c.accent, modifier = Modifier.size(22.dp))
+    }
+}
+
+@Composable
+private fun HintText(text: String) {
+    val c = iosColors()
+    Text(text, color = c.textSecondary, fontSize = 12.sp)
 }
 
 @Composable
