@@ -2,9 +2,8 @@ package com.rgblight.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -45,10 +44,14 @@ fun EffectsScreen(vm: MainViewModel) {
     Column(
         Modifier.fillMaxSize().background(c.bg).verticalScroll(rememberScrollState()).padding(16.dp)
     ) {
-        // Анимированное превью
-        val previewA = colors.firstOrNull() ?: 0xFF0000
-        val previewB = colors.getOrNull(1) ?: previewA
-        PreviewPulse(Color(previewA), Color(previewB), height = 80)
+        // Превью выбранного эффекта
+        EffectPreview(
+            isProtocol = seg == 0,
+            protocolId = protocolId,
+            mode = mode,
+            colors = colors,
+            height = 80
+        )
         Spacer(Modifier.height(16.dp))
 
         IosSegmentedControl(
@@ -85,8 +88,11 @@ fun EffectsScreen(vm: MainViewModel) {
             }
         } else {
             // === Кастомные (7 режимов) ===
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                itemsIndexed(EffectCatalog.modes) { _, meta ->
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                EffectCatalog.modes.forEach { meta ->
                     FilterChip(
                         selected = mode == meta.mode,
                         onClick = { vm.setEffectMode(meta.mode) },
@@ -105,12 +111,17 @@ fun EffectsScreen(vm: MainViewModel) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("Цвета", color = c.textPrimary, fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    if (colors.size < 8) IconButton(onClick = { pendingColor = colors.firstOrNull() ?: 0xFF0000; showAddColor = true }) {
+                    if (colors.size < 8) IconButton(onClick = {
+                        pendingColor = colors.firstOrNull() ?: 0xFF0000; showAddColor = true
+                    }) {
                         Icon(Icons.Default.Add, null, tint = c.accent)
                     }
                 }
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    itemsIndexed(colors) { idx, argb ->
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    colors.forEachIndexed { idx, argb ->
                         Box(
                             Modifier.size(40.dp)
                                 .background(Color(argb), RoundedCornerShape(50))

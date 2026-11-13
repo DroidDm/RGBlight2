@@ -3,9 +3,8 @@ package com.rgblight.ui.screens
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -38,7 +37,6 @@ fun ColorScreen(vm: MainViewModel) {
     var showSave by remember { mutableStateOf(false) }
     var deleteSlot by remember { mutableStateOf<Int?>(null) }
 
-    // Текущий RGB — вычисляется из HSV-состояния (state.value = яркость 0..100)
     val rgb = AndroidColor.HSVToColor(
         floatArrayOf(state.hue, state.saturation, state.value / 100f)
     )
@@ -75,8 +73,11 @@ fun ColorScreen(vm: MainViewModel) {
         Text("Быстрые цвета", color = c.textPrimary, fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(8.dp))
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(QUICK_COLORS) { argb ->
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            QUICK_COLORS.forEach { argb ->
                 Box(
                     Modifier.size(40.dp)
                         .background(Color(argb), RoundedCornerShape(50))

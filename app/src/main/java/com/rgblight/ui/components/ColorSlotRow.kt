@@ -5,30 +5,26 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.Icon
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.rgblight.data.ColorSlot
 import com.rgblight.ui.theme.iosColors
 
 /**
  * Ряд слотов сохранённых цветов.
- * - пустой = серый кружок с «+»
- * - активный = пульсирующая обводка
- * - тап = выбрать/снять выбор (снаружи через onActivate)
- * - долгий тап по непустому = удалить (диалог подтверждения снаружи)
+ * Используем Row + horizontalScroll, а не LazyRow — потому что этот ряд
+ * встраивается в вертикально-скроллируемую колонку (ColorScreen).
  */
 @Composable
 fun ColorSlotRow(
@@ -42,12 +38,12 @@ fun ColorSlotRow(
     val c = iosColors()
     val activeCount = slots.count { it.rgb != null }
 
-    LazyRow(
-        modifier.fillMaxWidth(),
+    Row(
+        modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        itemsIndexed(slots) { idx, slot ->
+        slots.forEachIndexed { idx, slot ->
             if (slot.rgb != null) {
                 SlotCircle(
                     rgb = slot.rgb,
