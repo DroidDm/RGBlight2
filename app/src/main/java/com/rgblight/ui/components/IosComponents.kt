@@ -42,14 +42,14 @@ fun IosTopBar(
                     }
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), content = rightActions)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), content = rightActions)
         }
     }
 }
 
 @Composable
 fun IosTabBar(
-    items: List<Pair<String, ImageVector>>,
+    items: List<Triple<String, ImageVector, Boolean>>,
     selected: Int,
     onSelect: (Int) -> Unit
 ) {
@@ -60,22 +60,20 @@ fun IosTabBar(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            items.forEachIndexed { i, (label, icon) ->
+            items.forEachIndexed { i, (label, icon, enabled) ->
                 val isSel = i == selected
+                val tint = when {
+                    !enabled -> c.textSecondary.copy(alpha = 0.4f)
+                    isSel -> c.accent
+                    else -> c.textSecondary
+                }
                 Column(
-                    Modifier.clickable { onSelect(i) }.padding(horizontal = 8.dp, vertical = 4.dp),
+                    Modifier.clickable(enabled) { onSelect(i) }
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(
-                        icon, contentDescription = label,
-                        tint = if (isSel) c.accent else c.textSecondary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Text(
-                        label,
-                        color = if (isSel) c.accent else c.textSecondary,
-                        fontSize = 10.sp
-                    )
+                    Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+                    Text(label, color = tint, fontSize = 10.sp)
                 }
             }
         }
@@ -86,8 +84,7 @@ fun IosTabBar(
 fun IosCard(content: @Composable ColumnScope.() -> Unit) {
     val c = iosColors()
     Column(
-        Modifier.fillMaxWidth()
-            .background(c.surface, RoundedCornerShape(12.dp))
+        Modifier.fillMaxWidth().background(c.surface, RoundedCornerShape(12.dp))
             .padding(horizontal = 16.dp),
         content = content
     )
@@ -106,8 +103,7 @@ fun IosRow(
     Row(
         Modifier.fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
-            .heightIn(min = 44.dp)
-            .padding(vertical = 8.dp),
+            .heightIn(min = 44.dp).padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) {
@@ -137,28 +133,19 @@ fun IosSegmentedControl(
 ) {
     val c = iosColors()
     Row(
-        modifier
-            .background(c.surfaceSecondary.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
+        modifier.background(c.surfaceSecondary.copy(alpha = 0.5f), RoundedCornerShape(9.dp))
             .padding(2.dp)
     ) {
         options.forEachIndexed { i, label ->
             val sel = i == selectedIndex
             Box(
                 Modifier.weight(1f)
-                    .background(
-                        if (sel) c.surface else Color.Transparent,
-                        RoundedCornerShape(7.dp)
-                    )
-                    .clickable { onSelect(i) }
-                    .padding(vertical = 6.dp),
+                    .background(if (sel) c.surface else Color.Transparent, RoundedCornerShape(7.dp))
+                    .clickable { onSelect(i) }.padding(vertical = 6.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    label,
-                    fontSize = 13.sp,
-                    color = c.textPrimary,
-                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal
-                )
+                Text(label, fontSize = 13.sp, color = c.textPrimary,
+                    fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal)
             }
         }
     }
@@ -177,56 +164,63 @@ fun IosAlertDialog(
 ) {
     val c = iosColors()
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = c.surface,
-            modifier = Modifier.width(270.dp)
-        ) {
+        Surface(shape = RoundedCornerShape(14.dp), color = c.surface, modifier = Modifier.width(270.dp)) {
             Column(Modifier.padding(top = 20.dp)) {
-                Text(
-                    title,
-                    color = c.textPrimary,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                )
+                Text(title, color = c.textPrimary, fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
                 if (message != null) {
                     Spacer(Modifier.height(6.dp))
-                    Text(
-                        message,
-                        color = c.textPrimary,
-                        fontSize = 13.sp,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                    )
+                    Text(message, color = c.textPrimary, fontSize = 13.sp, textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
                 }
                 content()
                 Spacer(Modifier.height(16.dp))
                 IosDivider()
                 Row(Modifier.fillMaxWidth().height(44.dp)) {
                     if (dismissLabel != null) {
-                        Box(
-                            Modifier.weight(1f).fillMaxHeight().clickable { onDismiss() },
-                            contentAlignment = Alignment.Center
-                        ) {
+                        Box(Modifier.weight(1f).fillMaxHeight().clickable { onDismiss() },
+                            contentAlignment = Alignment.Center) {
                             Text(dismissLabel, color = c.accent, fontSize = 17.sp)
                         }
                         Box(Modifier.width(0.5.dp).fillMaxHeight().background(c.separator))
                     }
-                    Box(
-                        Modifier.weight(1f).fillMaxHeight().clickable { onConfirm() },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            confirmLabel,
-                            color = if (destructive) c.red else c.accent,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                    Box(Modifier.weight(1f).fillMaxHeight().clickable { onConfirm() },
+                        contentAlignment = Alignment.Center) {
+                        Text(confirmLabel, color = if (destructive) c.red else c.accent,
+                            fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
+        }
+    }
+}
+
+/** Простое окно ввода текста, iOS-стиль. */
+@Composable
+fun IosInputDialog(
+    title: String,
+    initial: String = "",
+    placeholder: String = "",
+    onSave: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val c = iosColors()
+    var value by remember { androidx.compose.runtime.mutableStateOf(initial) }
+    IosAlertDialog(
+        title = title,
+        confirmLabel = "Сохранить",
+        dismissLabel = "Отмена",
+        onConfirm = { onSave(value.trim()) },
+        onDismiss = onDismiss
+    ) {
+        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = { value = it },
+                placeholder = { Text(placeholder, color = c.textSecondary) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }

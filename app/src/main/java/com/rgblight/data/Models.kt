@@ -15,5 +15,11 @@ data class AppSettings(
     val lastDeviceMac: String = "",
     val lastDeviceName: String = "",
     val lastColor: LastColor = LastColor(),
-    val updateUrl: String = ""
+    val updateUrl: String = "",
+    val defaultSleepMinutes: Int = 30,
+    // Параметры эффектов (общие)
+    val speed: Int = 128,
+    val brightness: Int = 100,
+    val holdMs: Int = 1000,
+    val rampMs: Int = 500
 )

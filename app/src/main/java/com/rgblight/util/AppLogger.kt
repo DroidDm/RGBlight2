@@ -24,8 +24,8 @@ data class LogEntry(
 }
 
 object AppLogger {
-    private const val MAX_ENTRIES = 5000
-    private const val ADB_TAG = "RGBLight"
+    private const val MAX = 5000
+    private const val ADB = "RGBLight"
 
     private val _entries = MutableStateFlow<List<LogEntry>>(emptyList())
     val entries: StateFlow<List<LogEntry>> = _entries.asStateFlow()
@@ -37,36 +37,23 @@ object AppLogger {
         val full = if (t != null) "$msg: ${t.message}\n${t.stackTraceToString()}" else msg
         add(LogLevel.ERROR, tag, full)
     }
-
-    fun logBytes(tag: String, prefix: String, data: ByteArray) {
-        val hex = data.joinToString(" ") { "%02X".format(it.toInt() and 0xFF) }
-        add(LogLevel.DEBUG, tag, "$prefix: $hex")
+    fun bytes(tag: String, prefix: String, data: ByteArray) {
+        add(LogLevel.DEBUG, tag, "$prefix: ${data.joinToString(" ") { "%02X".format(it.toInt() and 0xFF) }}")
     }
-
     fun clear() { _entries.value = emptyList() }
-
     fun export(): String {
         val df = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
-        val header = buildString {
-            appendLine("RGB light — диагностический журнал")
-            appendLine("Сформирован: ${df.format(Date())}")
-            appendLine("Записей: ${_entries.value.size}")
-            appendLine()
-        }
-        return header + _entries.value.joinToString("\n") { it.formatted() }
+        val head = "RGB light — журнал\nСформирован: ${df.format(Date())}\nЗаписей: ${_entries.value.size}\n\n"
+        return head + _entries.value.joinToString("\n") { it.formatted() }
     }
-
-    private fun add(level: LogLevel, tag: String, message: String) {
-        val e = LogEntry(System.currentTimeMillis(), level, tag, message)
+    private fun add(level: LogLevel, tag: String, msg: String) {
+        val e = LogEntry(System.currentTimeMillis(), level, tag, msg)
         when (level) {
-            LogLevel.DEBUG -> Log.d(ADB_TAG, "[$tag] $message")
-            LogLevel.INFO  -> Log.i(ADB_TAG, "[$tag] $message")
-            LogLevel.WARN  -> Log.w(ADB_TAG, "[$tag] $message")
-            LogLevel.ERROR -> Log.e(ADB_TAG, "[$tag] $message")
+            LogLevel.DEBUG -> Log.d(ADB, "[$tag] $msg")
+            LogLevel.INFO  -> Log.i(ADB, "[$tag] $msg")
+            LogLevel.WARN  -> Log.w(ADB, "[$tag] $msg")
+            LogLevel.ERROR -> Log.e(ADB, "[$tag] $msg")
         }
-        _entries.update { old ->
-            val newList = old + e
-            if (newList.size > MAX_ENTRIES) newList.takeLast(MAX_ENTRIES) else newList
-        }
+        _entries.update { it.plus(e).let { l -> if (l.size > MAX) l.takeLast(MAX) else l } }
     }
 }

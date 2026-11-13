@@ -1,34 +1,19 @@
 package com.rgblight
 
 import android.Manifest
-import android.bluetooth.BluetoothDevice
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.BluetoothDisabled
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.material.icons.filled.PowerSettingsNew
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -50,9 +35,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun Root(vm: MainViewModel = viewModel()) {
     val settings by vm.settings.collectAsState()
-    RgbLightTheme(mode = settings.themeMode) {
-        AppScreen(vm)
-    }
+    RgbLightTheme(mode = settings.themeMode) { AppScreen(vm) }
 }
 
 @Composable
@@ -60,29 +43,31 @@ private fun AppScreen(vm: MainViewModel) {
     val c = iosColors()
     val state by vm.connectionState.collectAsState()
     val connected by vm.connectedDevice.collectAsState()
-    val devices by vm.devices.collectAsState()
+    val scanning by vm.scanning.collectAsState()
+    val sleepUntil by vm.sleepUntilMs.collectAsState()
+    val settings by vm.settings.collectAsState()
 
     var tab by remember { mutableIntStateOf(0) }
+    var showSleep by remember { mutableStateOf(false) }
     var permsAsked by remember { mutableStateOf(false) }
 
-    val permsLauncher = rememberLauncherForActivityResult(
+    val perms = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { }
 
     LaunchedEffect(Unit) {
         if (!permsAsked) {
             permsAsked = true
-            val needed = mutableListOf<String>()
+            val need = mutableListOf<String>()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                needed.add(Manifest.permission.BLUETOOTH_SCAN)
-                needed.add(Manifest.permission.BLUETOOTH_CONNECT)
-            } else {
-                needed.add(Manifest.permission.ACCESS_FINE_LOCATION)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                needed.add(Manifest.permission.POST_NOTIFICATIONS)
-            }
-            permsLauncher.launch(needed.toTypedArray())
+                need += Manifest.permission.BLUETOOTH_SCAN
+                need += Manifest.permission.BLUETOOTH_CONNECT
+            } else need += Manifest.permission.ACCESS_FINE_LOCATION
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                need += Manifest.permission.POST_NOTIFICATIONS
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                need += Manifest.permission.RECORD_AUDIO
+            perms.launch(need.toTypedArray())
         }
     }
 
@@ -97,19 +82,33 @@ private fun AppScreen(vm: MainViewModel) {
         else -> "Не подключено"
     }
 
+    // Сон-таймер: остаток в мм:сс
+    val sleepText = sleepUntil?.let { until ->
+        val left = (until - System.currentTimeMillis()).coerceAtLeast(0)
+        "%d:%02d".format(left / 60_000, left / 1000 % 60)
+    }
+
     Scaffold(
         containerColor = c.bg,
         topBar = {
             IosTopBar(
                 title = "RGB light",
-                subtitle = statusText,
-                statusColor = statusColor,
+                subtitle = if (sleepText != null) "Сон: $sleepText" else statusText,
+                statusColor = if (sleepText != null) Color(0xFFFF9500) else statusColor,
                 rightActions = {
+                    IconButton(onClick = { vm.startScanAuto() }) {
+                        if (scanning) CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = c.accent
+                        ) else Icon(Icons.Default.Search, null, tint = c.textPrimary)
+                    }
                     IconButton(onClick = { vm.togglePower() }) {
                         Icon(Icons.Default.PowerSettingsNew, null, tint = c.textPrimary)
                     }
                     IconButton(onClick = { vm.disconnect() }) {
                         Icon(Icons.Default.BluetoothDisabled, null, tint = c.textPrimary)
+                    }
+                    IconButton(onClick = { showSleep = true }) {
+                        Icon(Icons.Default.Schedule, null, tint = c.textPrimary)
                     }
                 }
             )
@@ -117,79 +116,76 @@ private fun AppScreen(vm: MainViewModel) {
         bottomBar = {
             IosTabBar(
                 items = listOf(
-                    "Цвет" to Icons.Default.Palette,
-                    "Эффекты" to Icons.Default.AutoAwesome,
-                    "Микс" to Icons.Default.Tune,
-                    "Сохр." to Icons.Default.Star,
-                    "Настройки" to Icons.Default.Settings
+                    Triple("Цвет", Icons.Default.Palette, true),
+                    Triple("Эффекты", Icons.Default.AutoAwesome, true),
+                    Triple("Микс", Icons.Default.Tune, true),
+                    Triple("Музыка", Icons.Default.MusicNote, true),
+                    Triple("Сохр.", Icons.Default.Star, true),
+                    Triple("Настр.", Icons.Default.Settings, true)
                 ),
                 selected = tab,
                 onSelect = { tab = it }
             )
         }
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
-            val notConnected = state !is ConnectionState.Connected
-            if (notConnected && tab == 0) {
-                ConnectPrompt(
-                    devices = devices.map { (it.device.name ?: it.device.address) to it.device },
-                    onScan = { vm.startScan() },
-                    onConnect = { vm.connect(it) }
-                )
-            } else {
-                when (tab) {
-                    0 -> ColorScreen(vm)
-                    1 -> EffectsScreen(vm)
-                    2 -> MixScreen(vm)
-                    3 -> SavedScreen(vm)
-                    4 -> SettingsScreen(vm)
-                }
+    ) { pad ->
+        Column(Modifier.fillMaxSize().padding(pad)) {
+            when (tab) {
+                0 -> ColorScreen(vm)
+                1 -> EffectsScreen(vm)
+                2 -> MixScreen(vm)
+                3 -> MusicScreen(vm)
+                4 -> SavedScreen(vm)
+                5 -> SettingsScreen(vm)
             }
         }
+    }
+
+    if (showSleep) {
+        SleepDialog(
+            initial = settings.defaultSleepMinutes,
+            onStart = { m -> vm.startSleep(m); showSleep = false },
+            onCancel = { vm.cancelSleep(); showSleep = false },
+            onDismiss = { showSleep = false },
+            active = sleepUntil != null
+        )
     }
 }
 
 @Composable
-private fun ConnectPrompt(
-    devices: List<Pair<String, BluetoothDevice>>,
-    onScan: () -> Unit,
-    onConnect: (BluetoothDevice) -> Unit
+private fun SleepDialog(
+    initial: Int, onStart: (Int) -> Unit, onCancel: () -> Unit,
+    onDismiss: () -> Unit, active: Boolean
 ) {
     val c = iosColors()
-    Column(
-        Modifier.fillMaxSize().background(c.bg).padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    var minutes by remember { mutableStateOf(initial.toString()) }
+    val presets = listOf(5, 15, 30, 60)
+    com.rgblight.ui.components.IosAlertDialog(
+        title = "Сон-таймер",
+        message = if (active) "Таймер активен" else "Через сколько выключить ленту",
+        confirmLabel = "Запустить",
+        dismissLabel = "Отмена",
+        onConfirm = { onStart(minutes.toIntOrNull() ?: initial) },
+        onDismiss = onDismiss
     ) {
-        Spacer(Modifier.height(32.dp))
-        Text("🔍", fontSize = 48.sp)
-        Spacer(Modifier.height(12.dp))
-        Text("Подключитесь к подсветке", color = c.textPrimary, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-        Spacer(Modifier.height(8.dp))
-        Text("Включите подсветку и нажмите «Сканировать»", color = c.textSecondary, fontSize = 15.sp)
-        Spacer(Modifier.height(24.dp))
-        Button(
-            onClick = onScan,
-            colors = ButtonDefaults.buttonColors(containerColor = c.accent),
-            shape = RoundedCornerShape(10.dp),
-            modifier = Modifier.height(50.dp).fillMaxWidth()
-        ) { Text("Сканировать", fontWeight = FontWeight.SemiBold) }
-        Spacer(Modifier.height(16.dp))
-        LazyColumn(Modifier.fillMaxSize()) {
-            items(devices) { (name, dev) ->
-                Row(
-                    Modifier.fillMaxWidth()
-                        .background(c.surface, RoundedCornerShape(10.dp))
-                        .clickable { onConnect(dev) }
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(name, color = c.textPrimary, fontSize = 17.sp)
-                        Text(dev.address, color = c.textSecondary, fontSize = 13.sp)
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                presets.forEach { m ->
+                    OutlinedButton(onClick = { minutes = m.toString() }, modifier = Modifier.weight(1f)) {
+                        Text("$m", color = c.textPrimary)
                     }
-                    Icon(Icons.Default.ChevronRight, null, tint = c.textSecondary)
                 }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = minutes,
+                onValueChange = { minutes = it.filter { ch -> ch.isDigit() }.take(4) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Минут", color = c.textSecondary) }
+            )
+            if (active) {
                 Spacer(Modifier.height(8.dp))
+                TextButton(onClick = onCancel) { Text("Остановить таймер", color = c.red) }
             }
         }
     }

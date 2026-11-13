@@ -29,58 +29,39 @@ fun ColorWheel(
         Color.Red, Color.Yellow, Color.Green,
         Color.Cyan, Color.Blue, Color.Magenta, Color.Red
     )
-
-    Box(modifier.fillMaxWidth().padding(8.dp).aspectRatio(1f)) {
+    Box(modifier.fillMaxWidth().padding(4.dp).aspectRatio(1f)) {
         Canvas(
             Modifier.fillMaxWidth().aspectRatio(1f)
                 .pointerInput(Unit) {
                     detectDragGestures(
-                        onDragStart = { pos -> handle(pos, size.width.toFloat(), size.height.toFloat(), onChange) },
-                        onDrag = { change, _ -> handle(change.position, size.width.toFloat(), size.height.toFloat(), onChange) }
+                        onDragStart = { p -> handle(p, size.width.toFloat(), size.height.toFloat(), onChange) },
+                        onDrag = { c, _ -> handle(c.position, size.width.toFloat(), size.height.toFloat(), onChange) }
                     )
                 }
                 .pointerInput(Unit) {
-                    detectTapGestures { pos -> handle(pos, size.width.toFloat(), size.height.toFloat(), onChange) }
+                    detectTapGestures { p -> handle(p, size.width.toFloat(), size.height.toFloat(), onChange) }
                 }
         ) {
             val r = size.minDimension / 2f
             val center = Offset(size.width / 2f, size.height / 2f)
-
-            drawCircle(
-                brush = Brush.sweepGradient(rainbow, center),
-                radius = r * 0.98f,
-                center = center,
-                style = Stroke(width = r * 0.06f)
-            )
-
-            val hueColor = Color(
-                AndroidColor.HSVToColor(floatArrayOf(((hue % 360f) + 360f) % 360f, 1f, 1f))
-            )
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color.White, hueColor),
-                    center = center,
-                    radius = r * 0.94f
-                ),
-                radius = r * 0.94f,
-                center = center
-            )
-
-            val angleRad = Math.toRadians(hue.toDouble())
-            val dist = saturation.coerceIn(0f, 1f) * r * 0.94f
-            val px = center.x + (cos(angleRad) * dist).toFloat()
-            val py = center.y + (sin(angleRad) * dist).toFloat()
-
-            drawCircle(color = Color.White, radius = r * 0.05f, center = Offset(px, py), style = Stroke(width = 3f))
-            drawCircle(color = Color.Black.copy(alpha = 0.35f), radius = r * 0.05f, center = Offset(px, py), style = Stroke(width = 1.5f))
+            drawCircle(brush = Brush.sweepGradient(rainbow, center), radius = r * 0.98f,
+                center = center, style = Stroke(width = r * 0.06f))
+            val hueColor = Color(AndroidColor.HSVToColor(floatArrayOf(((hue % 360f) + 360f) % 360f, 1f, 1f)))
+            drawCircle(brush = Brush.radialGradient(listOf(Color.White, hueColor), center, r * 0.94f),
+                radius = r * 0.94f, center = center)
+            val a = Math.toRadians(hue.toDouble())
+            val d = saturation.coerceIn(0f, 1f) * r * 0.94f
+            val px = center.x + (cos(a) * d).toFloat()
+            val py = center.y + (sin(a) * d).toFloat()
+            drawCircle(Color.White, r * 0.05f, Offset(px, py), style = Stroke(width = 3f))
+            drawCircle(Color.Black.copy(alpha = 0.35f), r * 0.05f, Offset(px, py), style = Stroke(width = 1.5f))
         }
     }
 }
 
 private fun handle(pos: Offset, w: Float, h: Float, onChange: (Float, Float) -> Unit) {
     val center = Offset(w / 2f, h / 2f)
-    val dx = pos.x - center.x
-    val dy = pos.y - center.y
+    val dx = pos.x - center.x; val dy = pos.y - center.y
     val dist = sqrt(dx * dx + dy * dy)
     val maxR = w / 2f * 0.94f
     val sat = (dist / maxR).coerceIn(0f, 1f)

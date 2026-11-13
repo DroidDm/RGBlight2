@@ -3,9 +3,8 @@ package com.rgblight.data
 import org.json.JSONArray
 import org.json.JSONObject
 
-enum class MixMode(val label: String) {
-    FADE("Fade"), JUMP("Jump"), BREATHE("Breathe"), STROBE("Strobe"), WAVE("Wave")
-}
+enum class EffectMode { FADE, FADE_PAUSE, FADE_CUSTOM, FADE_PULSE, PULSE, JUMP, NEW_YEAR }
+enum class StepKind { COLOR, EFFECT }
 
 data class SavedColor(
     val id: String,
@@ -15,94 +14,129 @@ data class SavedColor(
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id); put("name", name)
-        put("r", r); put("g", g); put("b", b)
-        put("createdAt", createdAt)
+        put("r", r); put("g", g); put("b", b); put("createdAt", createdAt)
     }
     companion object {
-        fun fromJson(o: JSONObject): SavedColor = SavedColor(
-            id = o.optString("id"),
-            name = o.optString("name"),
-            r = o.optInt("r", 255), g = o.optInt("g", 255), b = o.optInt("b", 255),
-            createdAt = o.optLong("createdAt", 0)
+        fun fromJson(o: JSONObject) = SavedColor(
+            o.optString("id"), o.optString("name"),
+            o.optInt("r", 255), o.optInt("g", 255), o.optInt("b", 255),
+            o.optLong("createdAt", 0)
         )
     }
 }
 
+/** Сохранённый эффект: либо протокольный (protocolId != null), либо кастомный. */
 data class SavedEffect(
     val id: String,
     val name: String,
-    val effectId: Int,
+    val protocolId: Int?,      // 0..7 — протокольный id, или null — кастомный
+    val mode: EffectMode,      // для кастомного
+    val colors: List<Int>,     // для кастомного
     val speed: Int,
     val brightness: Int,
+    val holdMs: Int,
+    val rampMs: Int,
     val createdAt: Long = System.currentTimeMillis()
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id); put("name", name)
-        put("effectId", effectId); put("speed", speed); put("brightness", brightness)
+        put("protocolId", protocolId ?: -1)
+        put("mode", mode.name)
+        put("colors", JSONArray(colors))
+        put("speed", speed); put("brightness", brightness)
+        put("holdMs", holdMs); put("rampMs", rampMs)
         put("createdAt", createdAt)
     }
     companion object {
-        fun fromJson(o: JSONObject): SavedEffect = SavedEffect(
-            id = o.optString("id"), name = o.optString("name"),
-            effectId = o.optInt("effectId", 0),
-            speed = o.optInt("speed", 128), brightness = o.optInt("brightness", 100),
-            createdAt = o.optLong("createdAt", 0)
-        )
+        fun fromJson(o: JSONObject): SavedEffect {
+            val arr = o.optJSONArray("colors") ?: JSONArray()
+            val list = mutableListOf<Int>()
+            for (i in 0 until arr.length()) list.add(arr.getInt(i))
+            return SavedEffect(
+                o.optString("id"), o.optString("name"),
+                o.optInt("protocolId", -1).takeIf { it >= 0 },
+                runCatching { EffectMode.valueOf(o.optString("mode", "FADE")) }.getOrDefault(EffectMode.FADE),
+                list,
+                o.optInt("speed", 128), o.optInt("brightness", 100),
+                o.optInt("holdMs", 1000), o.optInt("rampMs", 500),
+                o.optLong("createdAt", 0)
+            )
+        }
+    }
+}
+
+/** Шаг микса. */
+data class MixStep(
+    val kind: StepKind,
+    val color: Int = 0xFFFFFF,          // для COLOR
+    val effectMode: EffectMode = EffectMode.FADE, // для EFFECT
+    val colors: List<Int> = listOf(0xFF0000, 0x00FF00, 0x0000FF),
+    val holdMs: Int = 1000,
+    val rampMs: Int = 500
+) {
+    fun toJson(): JSONObject = JSONObject().apply {
+        put("kind", kind.name)
+        put("color", color)
+        put("effectMode", effectMode.name)
+        put("colors", JSONArray(colors))
+        put("holdMs", holdMs); put("rampMs", rampMs)
+    }
+    companion object {
+        fun fromJson(o: JSONObject): MixStep {
+            val arr = o.optJSONArray("colors") ?: JSONArray()
+            val list = mutableListOf<Int>()
+            for (i in 0 until arr.length()) list.add(arr.getInt(i))
+            return MixStep(
+                runCatching { StepKind.valueOf(o.optString("kind", "COLOR")) }.getOrDefault(StepKind.COLOR),
+                o.optInt("color", 0xFFFFFF),
+                runCatching { EffectMode.valueOf(o.optString("effectMode", "FADE")) }.getOrDefault(EffectMode.FADE),
+                list,
+                o.optInt("holdMs", 1000), o.optInt("rampMs", 500)
+            )
+        }
     }
 }
 
 data class SavedMix(
     val id: String,
     val name: String,
-    val colors: List<Int>,
-    val mode: MixMode,
+    val steps: List<MixStep>,
     val speed: Int,
     val brightness: Int,
     val createdAt: Long = System.currentTimeMillis()
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id); put("name", name)
-        put("colors", JSONArray(colors))
-        put("mode", mode.name); put("speed", speed); put("brightness", brightness)
+        put("steps", JSONArray().apply { steps.forEach { put(it.toJson()) } })
+        put("speed", speed); put("brightness", brightness)
         put("createdAt", createdAt)
     }
     companion object {
         fun fromJson(o: JSONObject): SavedMix {
-            val arr = o.optJSONArray("colors") ?: JSONArray()
-            val list = mutableListOf<Int>()
-            for (i in 0 until arr.length()) list.add(arr.getInt(i))
+            val arr = o.optJSONArray("steps") ?: JSONArray()
+            val list = mutableListOf<MixStep>()
+            for (i in 0 until arr.length()) runCatching { list.add(MixStep.fromJson(arr.getJSONObject(i))) }
             return SavedMix(
-                id = o.optString("id"), name = o.optString("name"),
-                colors = list,
-                mode = runCatching { MixMode.valueOf(o.optString("mode", "FADE")) }.getOrDefault(MixMode.FADE),
-                speed = o.optInt("speed", 128), brightness = o.optInt("brightness", 100),
-                createdAt = o.optLong("createdAt", 0)
+                o.optString("id"), o.optString("name"), list,
+                o.optInt("speed", 128), o.optInt("brightness", 100),
+                o.optLong("createdAt", 0)
             )
         }
     }
 }
 
-/** Активное (несохранённое) состояние микса — для восстановления между запусками */
-data class ActiveMixState(
-    val colors: List<Int> = emptyList(),
-    val mode: MixMode = MixMode.FADE,
-    val speed: Int = 128,
-    val brightness: Int = 100
+/** Слот сохранённого цвета (нижний ряд на вкладке «Цвет»). */
+data class ColorSlot(
+    val index: Int,
+    val rgb: Int? = null   // null — пустой
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
-        put("colors", JSONArray(colors))
-        put("mode", mode.name); put("speed", speed); put("brightness", brightness)
+        put("index", index); put("rgb", rgb ?: -1)
     }
     companion object {
-        fun fromJson(o: JSONObject): ActiveMixState {
-            val arr = o.optJSONArray("colors") ?: JSONArray()
-            val list = mutableListOf<Int>()
-            for (i in 0 until arr.length()) list.add(arr.getInt(i))
-            return ActiveMixState(
-                colors = list,
-                mode = runCatching { MixMode.valueOf(o.optString("mode", "FADE")) }.getOrDefault(MixMode.FADE),
-                speed = o.optInt("speed", 128), brightness = o.optInt("brightness", 100)
-            )
+        fun fromJson(o: JSONObject): ColorSlot {
+            val rgb = o.optInt("rgb", -1)
+            return ColorSlot(o.optInt("index", 0), if (rgb < 0) null else rgb)
         }
     }
 }

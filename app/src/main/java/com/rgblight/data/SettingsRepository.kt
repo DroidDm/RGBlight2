@@ -25,6 +25,11 @@ class SettingsRepository(private val context: Context) {
         val LAST_B = intPreferencesKey("last_b")
         val LAST_BRIGHT = intPreferencesKey("last_bright")
         val UPDATE_URL = stringPreferencesKey("update_url")
+        val SLEEP_MIN = intPreferencesKey("sleep_min")
+        val SPEED = intPreferencesKey("speed")
+        val BRIGHT = intPreferencesKey("bright")
+        val HOLD = intPreferencesKey("hold")
+        val RAMP = intPreferencesKey("ramp")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -43,7 +48,12 @@ class SettingsRepository(private val context: Context) {
                 b = p[Keys.LAST_B] ?: 255,
                 brightness = p[Keys.LAST_BRIGHT] ?: 100
             ),
-            updateUrl = p[Keys.UPDATE_URL] ?: ""
+            updateUrl = p[Keys.UPDATE_URL] ?: "",
+            defaultSleepMinutes = p[Keys.SLEEP_MIN] ?: 30,
+            speed = p[Keys.SPEED] ?: 128,
+            brightness = p[Keys.BRIGHT] ?: 100,
+            holdMs = p[Keys.HOLD] ?: 1000,
+            rampMs = p[Keys.RAMP] ?: 500
         )
     }
 
@@ -66,4 +76,9 @@ class SettingsRepository(private val context: Context) {
         }
     }
     suspend fun setUpdateUrl(v: String) { context.dataStore.edit { it[Keys.UPDATE_URL] = v } }
+    suspend fun setSleepMinutes(v: Int) { context.dataStore.edit { it[Keys.SLEEP_MIN] = v } }
+    suspend fun setSpeed(v: Int) { context.dataStore.edit { it[Keys.SPEED] = v } }
+    suspend fun setBrightness(v: Int) { context.dataStore.edit { it[Keys.BRIGHT] = v } }
+    suspend fun setHoldMs(v: Int) { context.dataStore.edit { it[Keys.HOLD] = v } }
+    suspend fun setRampMs(v: Int) { context.dataStore.edit { it[Keys.RAMP] = v } }
 }

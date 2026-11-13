@@ -14,41 +14,24 @@ import androidx.core.view.WindowCompat
 import com.rgblight.data.ThemeMode
 
 data class IosColors(
-    val bg: Color,
-    val surface: Color,
-    val surfaceSecondary: Color,
-    val textPrimary: Color,
-    val textSecondary: Color,
-    val separator: Color,
-    val accent: Color,
-    val red: Color,
-    val green: Color
+    val bg: Color, val surface: Color, val surfaceSecondary: Color,
+    val textPrimary: Color, val textSecondary: Color, val separator: Color,
+    val accent: Color, val red: Color, val green: Color
 )
 
 private val LightScheme = lightColorScheme(
-    primary = IosAccentLight,
-    onPrimary = Color.White,
-    background = IosBgLight,
-    onBackground = IosTextLight,
-    surface = IosSurfaceLight,
-    onSurface = IosTextLight,
-    surfaceVariant = IosSurfaceSecLight,
-    onSurfaceVariant = IosTextSecLight,
-    outline = IosSeparatorLight,
-    error = IosRedLight
+    primary = IosAccentLight, onPrimary = Color.White,
+    background = IosBgLight, onBackground = IosTextLight,
+    surface = IosSurfaceLight, onSurface = IosTextLight,
+    surfaceVariant = IosSurfaceSecLight, onSurfaceVariant = IosTextSecLight,
+    outline = IosSeparatorLight, error = IosRedLight
 )
-
 private val DarkScheme = darkColorScheme(
-    primary = IosAccentDark,
-    onPrimary = Color.White,
-    background = IosBgDark,
-    onBackground = IosTextDark,
-    surface = IosSurfaceDark,
-    onSurface = IosTextDark,
-    surfaceVariant = IosSurfaceSecDark,
-    onSurfaceVariant = IosTextSecDark,
-    outline = IosSeparatorDark,
-    error = IosRedDark
+    primary = IosAccentDark, onPrimary = Color.White,
+    background = IosBgDark, onBackground = IosTextDark,
+    surface = IosSurfaceDark, onSurface = IosTextDark,
+    surfaceVariant = IosSurfaceSecDark, onSurfaceVariant = IosTextSecDark,
+    outline = IosSeparatorDark, error = IosRedDark
 )
 
 @Composable
@@ -60,15 +43,12 @@ fun RgbLightTheme(mode: ThemeMode, content: @Composable () -> Unit) {
     }
     val scheme = if (dark) DarkScheme else LightScheme
     val ios = if (dark) IosColors(
-        bg = IosBgDark, surface = IosSurfaceDark, surfaceSecondary = IosSurfaceSecDark,
-        textPrimary = IosTextDark, textSecondary = IosTextSecDark, separator = IosSeparatorDark,
-        accent = IosAccentDark, red = IosRedDark, green = IosGreenDark
+        IosBgDark, IosSurfaceDark, IosSurfaceSecDark, IosTextDark, IosTextSecDark,
+        IosSeparatorDark, IosAccentDark, IosRedDark, IosGreenDark
     ) else IosColors(
-        bg = IosBgLight, surface = IosSurfaceLight, surfaceSecondary = IosSurfaceSecLight,
-        textPrimary = IosTextLight, textSecondary = IosTextSecLight, separator = IosSeparatorLight,
-        accent = IosAccentLight, red = IosRedLight, green = IosGreenLight
+        IosBgLight, IosSurfaceLight, IosSurfaceSecLight, IosTextLight, IosTextSecLight,
+        IosSeparatorLight, IosAccentLight, IosRedLight, IosGreenLight
     )
-
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
@@ -79,7 +59,6 @@ fun RgbLightTheme(mode: ThemeMode, content: @Composable () -> Unit) {
             WindowCompat.getInsetsController(w, view).isAppearanceLightNavigationBars = !dark
         }
     }
-
     CompositionLocalProvider(LocalIosColors provides ios) {
         MaterialTheme(colorScheme = scheme, typography = IosTypography, content = content)
     }
@@ -87,9 +66,8 @@ fun RgbLightTheme(mode: ThemeMode, content: @Composable () -> Unit) {
 
 val LocalIosColors = staticCompositionLocalOf {
     IosColors(
-        bg = IosBgLight, surface = IosSurfaceLight, surfaceSecondary = IosSurfaceSecLight,
-        textPrimary = IosTextLight, textSecondary = IosTextSecLight, separator = IosSeparatorLight,
-        accent = IosAccentLight, red = IosRedLight, green = IosGreenLight
+        IosBgLight, IosSurfaceLight, IosSurfaceSecLight, IosTextLight, IosTextSecLight,
+        IosSeparatorLight, IosAccentLight, IosRedLight, IosGreenLight
     )
 }
 
